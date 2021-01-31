@@ -1,0 +1,120 @@
+#include <LiquidCrystal_I2C.h>
+#include <Wire.h>
+#include <SPI.h>
+#include <SD.h>
+#include <Adafruit_MLX90614.h> // Download: https://github.com/adafruit/Adafruit-MLX90614-Library
+#include <TimeLib.h>
+#include <DS1307RTC.h>
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+File myFile;
+const int trigger = 2, echo = 3, buzz = 4;
+int temp = 0;
+//------------- Settings -----------------//
+const float calib_factor = 1.00;
+const float alert_temp = 37.0;
+//----------------------------------------//
+
+void setup()
+{
+  pinMode(trigger, OUTPUT);
+  pinMode(echo, INPUT);
+  pinMode(buzz, OUTPUT);
+  mlx.begin();
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("CONTACTLESS     ");
+  lcd.setCursor(0, 1);
+  lcd.print("     THERMOMETER");
+  delay(2000);
+  if (!SD.begin(10))
+  {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("    SD CARD    ");
+    lcd.setCursor(0, 1);
+    lcd.print("   NOT FOUND");
+    while (true);
+  }
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(" SYSTEM   READY ");
+  lcd.setCursor(0, 1);
+  lcd.print("****************");
+}
+
+void loop()
+{
+  tmElements_t tm;
+  if (mes_dist() > 12.5 && mes_dist() < 14)
+  {
+    buzzer();
+    lcd.setCursor(0, 0);
+    lcd.print("                ");
+    lcd.setCursor(0, 0);
+    lcd.print("BODY TEMPERATURE");
+    lcd.setCursor(0, 1);
+    lcd.print("                ");
+    lcd.setCursor(4, 1);
+    lcd.print(mlx.readObjectTempC() * calib_factor, 1);
+    lcd.print(" *C");
+    temp = (mlx.readObjectTempC() * calib_factor);
+    if (temp >= alert_temp) buzzer_warn();
+    myFile = SD.open("Log_Data.txt", FILE_WRITE);
+    tmElements_t tm;
+    if (myFile)
+    {
+      if (RTC.read(tm))
+      {
+        myFile.print("TIME: ");
+        (tm.Hour >= 10) ?  (myFile.print(tm.Hour)) : (myFile.print('0'), myFile.print(tm.Hour));
+        myFile.print(":");
+        (tm.Minute >= 10) ?  (myFile.print(tm.Minute)) : (myFile.print('0'), myFile.print(tm.Minute));
+        myFile.print(":");
+        (tm.Second >= 10) ?  (myFile.print(tm.Second)) : (myFile.print('0'), myFile.print(tm.Second));
+      }
+      myFile.print(" -----> ");
+      myFile.print("Temperature: ");
+      myFile.print(mlx.readObjectTempC() * calib_factor, 1);
+      myFile.println(" *C");
+      myFile.close();
+    }
+    delay(1000);
+  }
+}
+
+float mes_dist()
+{
+  float distanceCM, resultCM;
+  int measure_dist;
+  digitalWrite(trigger, LOW);
+  delay(1);
+  digitalWrite(trigger, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigger, LOW);
+  measure_dist = pulseIn(echo, HIGH);
+  distanceCM = measure_dist * 0.034;
+  resultCM = distanceCM / 2;
+  return resultCM;
+}
+
+void buzzer()
+{
+  digitalWrite(buzz, HIGH);
+  delay(50);
+  digitalWrite(buzz, LOW);
+  delay(50);
+}
+
+void buzzer_warn()
+{
+  for (int x = 0; x < 20; x++)
+  {
+    digitalWrite(buzz, HIGH);
+    delay(100);
+    digitalWrite(buzz, LOW);
+    delay(100);
+  }
+}
